@@ -34,7 +34,7 @@ books_table = {
 index = 0
 
 
-while(index < 5):
+while index < 5:
     response = requests.get(current_page_url)
     soup = BeautifulSoup(response.content, "html.parser")
     books = soup.find_all("article", class_="product_pod")

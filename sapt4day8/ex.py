@@ -86,106 +86,72 @@ Notes:
     hardcode the count), and should handle the case where no author
     satisfies the condition without crashing.
 """
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import create_engine, Float
-from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy import Column, Integer, String
-from sqlalchemy import ForeignKey
-from sqlalchemy import CheckConstraint
-from sqlalchemy import Table
-
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship
+from sqlalchemy import create_engine, Float, Column, Integer, String, ForeignKey, CheckConstraint, Table
 
 Base = declarative_base()
 
+# Tabelul asociativ Many-to-Many pentru cărți și tag-uri
+book_tags = Table(
+    "book_tags",
+    Base.metadata,
+    Column("book_id", Integer, ForeignKey("books.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+)
 
 
-class Genres(Base):
+class Genre(Base):
     __tablename__ = "genres"
-    id = Column(Integer, primary_key= True)
-    name = Column(String, nullable= False, unique= True)
-    books = relationship("Book", back_populates= "genre", cascade= "all, delete")
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+
+    # Relație către cărți
+    books = relationship("Book", back_populates="genre", cascade="all, delete-orphan")
+
 
 class Author(Base):
     __tablename__ = "authors"
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     country = Column(String(50), nullable=True)
-    books = relationship("Book", back_populates = "author", cascade="all, delete")  # cascade='all, delete’ can be added
 
-"""
-"tags" table
+    # Relație către cărți
+    books = relationship("Book", back_populates="author", cascade="all, delete-orphan")
 
-   - id: integer, primary key
-   - name: string, not null, unique
-   - IMPORTANT: Since the CSV has no tag data, generate 10 synthetic tags (e.g.
-     "bestseller", "award-winning", "series", etc.)
-"""
-class Tags(Base):
+
+class Tag(Base):
     __tablename__ = "tags"
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable= False, unique= True)
+    name = Column(String, nullable=False, unique=True)
 
-
-"""
-"books" table
-
-   - id: integer, primary key
-   - title: string, not null
-   - upc: string, not null, UNIQUE
-   - genre_id: foreign key to genres.id, NOT NULL (every book has exactly
-     one genre)
-   - author_id: foreign key to authors.id, NOT NULL (every book gets an
-     author assigned from your synthetic author list)
-"""
+    # Relație către cărți
+    books = relationship("Book", secondary=book_tags, back_populates="tags")
 
 
 class Book(Base):
     __tablename__ = "books"
-    id = Column(Integer, primary_key= True)
-    title = Column(String, nullable= False)
-    upc = Column(String, nullable= False, unique= True)
-    genre_id = Column(Integer, ForeignKey("genres.id"), nullable = False)
-    author_id = Column(Integer, ForeignKey("authors.id"), nullable= False)
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    upc = Column(String, nullable=False, unique=True)
+    genre_id = Column(Integer, ForeignKey("genres.id"), nullable=False)
+    author_id = Column(Integer, ForeignKey("authors.id"), nullable=False)
+
+    # Relațiile mapate exact cum le apelezi în querying_tables.py
+    genre = relationship("Genre", back_populates="books")
+    author = relationship("Author", back_populates="books")
+    detail = relationship("BookDetail", back_populates="book", uselist=False, cascade="all, delete-orphan")
+    tags = relationship("Tag", secondary=book_tags, back_populates="books")
 
 
-"""
-"book_details" table
-
-   - id: integer, primary key
-   - book_id: foreign key to books.id, NOT NULL, UNIQUE
-   - rating: integer, not null ("One" -> 1, "Two" -> 2, ... "Five" -> 5)
-   - price: float, not null
-   - availability: integer, not null
-   - Add check constraints enforcing: rating is between 1 and 5, price is
-     non-negative, and availability is non-negative.
-"""
-class Book_Details(Base):
+class BookDetail(Base):
     __tablename__ = "book_details"
     id = Column(Integer, primary_key=True)
-    book_id = Column(Integer, ForeignKey("books.id"), unique= True)
-    rating = Column(Integer, CheckConstraint("rating >= 1 AND rating <= 5"), nullable= False)
-    price = Column(Float, CheckConstraint("price >= 0"), nullable= False)
-    availability = Column(Integer, CheckConstraint("availability >= 0"), nullable= False)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), unique=True, nullable=False)
+    rating = Column(Integer, CheckConstraint("rating >= 1 AND rating <= 5"), nullable=False)
+    price = Column(Float, CheckConstraint("price >= 0"), nullable=False)
+    availability = Column(Integer, CheckConstraint("availability >= 0"), nullable=False)
 
-
-book_tags = Table(
-    "book_tags",
-    Base.metadata,
-    Column("book_id", Integer, ForeignKey("books.id"), primary_key=True),
-    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True)
-)
-
-
-
-
-
-
-
-
+    book = relationship("Book", back_populates="detail")
 
 
 engine = create_engine('postgresql://postgres:admin@localhost/postgres')
-Base.metadata.drop_all(engine)
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
-session = Session()
